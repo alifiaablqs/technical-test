@@ -1,15 +1,43 @@
 package main
 
-import "github.com/gin-gonic/gin"
+import (
+	"fmt"
+	"net/http"
+
+	"technical-test/case-study-1/backend/config"
+	"technical-test/case-study-1/backend/internal/handler"
+	"technical-test/case-study-1/backend/internal/repository"
+	"technical-test/case-study-1/backend/internal/service"
+
+	"github.com/gin-gonic/gin"
+)
 
 func main() {
-	router := gin.Default()
+	// Connect database
+	db := config.ConnectDB()
+	defer db.Close()
 
-	router.GET("/api/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{
+	// Initialize layers
+	orderRepository := repository.NewOrderRepository(db)
+	orderService := service.NewOrderService(orderRepository)
+	orderHandler := handler.NewOrderHandler(orderService)
+
+	// Initialize Gin
+	r := gin.Default()
+
+	// Health check
+	r.GET("/api/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
 			"message": "Backend is running",
 		})
 	})
 
-	router.Run(":8080")
+	// Order routes
+	r.GET("/api/orders", orderHandler.GetOrders)
+
+	fmt.Println("Server running on http://localhost:8080")
+
+	if err := r.Run(":8080"); err != nil {
+		panic(err)
+	}
 }
