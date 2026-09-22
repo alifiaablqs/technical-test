@@ -37,6 +37,7 @@ func main() {
 	r.GET("/api/orders/:id", orderHandler.GetOrderByID)
 	r.POST("/api/orders", orderHandler.CreateOrder)
 	r.PATCH("/api/orders/:id/status", orderHandler.UpdateStatus)
+	r.POST("/api/orders/:id/cancel", orderHandler.CancelOrder)
 
 	fmt.Println("Server running on http://localhost:8080")
 

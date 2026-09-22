@@ -198,6 +198,10 @@ func (s *OrderService) UpdateOrderStatus(ctx context.Context, id uint64, input U
 	return order, nil
 }
 
+func (s *OrderService) CancelOrder(ctx context.Context, id uint64) (*model.Order, error) {
+	return s.UpdateOrderStatus(ctx, id, UpdateStatusInput{Status: "CANCELLED"})
+}
+
 func IsValidStatusTransition(currentStatus string, newStatus string) bool {
 	switch currentStatus {
 	case "TO DO":

@@ -46,3 +46,23 @@ func TestUpdateStatusValidation(t *testing.T) {
 	})
 }
 
+func TestCancelOrderValidation(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	svc := &service.OrderService{}
+	h := handler.NewOrderHandler(svc)
+
+	r := gin.New()
+	r.POST("/api/orders/:id/cancel", h.CancelOrder)
+
+	t.Run("Invalid Order ID returns 400", func(t *testing.T) {
+		req, _ := http.NewRequest("POST", "/api/orders/invalid-id/cancel", nil)
+		w := httptest.NewRecorder()
+
+		r.ServeHTTP(w, req)
+
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("expected 400, got %d", w.Code)
+		}
+	})
+}
