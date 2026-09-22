@@ -34,6 +34,7 @@ func main() {
 
 	// Order routes
 	r.GET("/api/orders", orderHandler.GetOrders)
+	r.POST("/api/orders", orderHandler.CreateOrder)
 
 	fmt.Println("Server running on http://localhost:8080")
 

@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"database/sql"
 	"technical-test/case-study-1/backend/internal/model"
 )
@@ -66,4 +67,52 @@ func (r *OrderRepository) GetAll() ([]model.Order, error) {
 	}
 
 	return orders, nil
+}
+func (r *OrderRepository) BeginTx(ctx context.Context) (*sql.Tx, error) {
+	return r.DB.BeginTx(ctx, nil)
+}
+
+func (r *OrderRepository) Create(ctx context.Context, tx *sql.Tx, order *model.Order) (uint64, error) {
+	query := `
+		INSERT INTO orders (order_number, client_id, technician_id, description, status, version, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`
+	res, err := tx.ExecContext(ctx, query,
+		order.OrderNumber,
+		order.ClientID,
+		order.TechnicianID,
+		order.Description,
+		order.Status,
+		order.Version,
+		order.CreatedAt,
+		order.UpdatedAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+
+	return uint64(id), nil
+}
+
+func (r *OrderRepository) CreateHistory(ctx context.Context, tx *sql.Tx, history *model.OrderStatusHistory) error {
+	query := `
+		INSERT INTO order_status_histories (order_id, status, created_at)
+		VALUES (?, ?, ?)
+	`
+	res, err := tx.ExecContext(ctx, query, history.OrderID, history.Status, history.CreatedAt)
+	if err != nil {
+		return err
+	}
+
+	id, err := res.LastInsertId()
+	if err == nil {
+		history.ID = uint64(id)
+	}
+
+	return nil
 }
