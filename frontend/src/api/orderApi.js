@@ -14,13 +14,23 @@ async function handleResponse(response) {
   return data
 }
 
-export async function fetchOrders() {
-  const response = await fetch(BASE_URL)
+export async function fetchOrders(params = {}) {
+  const query = new URLSearchParams()
+  if (params.technician_id) query.append('technician_id', params.technician_id)
+  if (params.client_id) query.append('client_id', params.client_id)
+  const queryString = query.toString() ? `?${query.toString()}` : ''
+
+  const response = await fetch(`${BASE_URL}${queryString}`)
   return handleResponse(response)
 }
 
-export async function fetchOrderDetail(id) {
-  const response = await fetch(`${BASE_URL}/${id}`)
+export async function fetchOrderDetail(id, params = {}) {
+  const query = new URLSearchParams()
+  if (params.technician_id) query.append('technician_id', params.technician_id)
+  if (params.client_id) query.append('client_id', params.client_id)
+  const queryString = query.toString() ? `?${query.toString()}` : ''
+
+  const response = await fetch(`${BASE_URL}/${id}${queryString}`)
   return handleResponse(response)
 }
 

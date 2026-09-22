@@ -16,7 +16,11 @@ import { Overview } from './components/Overview'
 import { CreateOrderModal } from './components/CreateOrderModal'
 import { CancelConfirmModal } from './components/CancelConfirmModal'
 
+import { useRole } from './context/RoleContext'
+
 export default function App() {
+  const { currentUser } = useRole()
+
   const [activeTab, setActiveTab] = useState('orders')
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false)
@@ -46,6 +50,18 @@ export default function App() {
     selectedOrderIdRef.current = selectedOrderId
   }, [selectedOrderId])
 
+  // Helper to construct query params for current active user
+  const getUserQueryParams = useCallback(() => {
+    if (!currentUser) return {}
+    if (currentUser.role === 'TECHNICIAN') {
+      return { technician_id: currentUser.id }
+    }
+    if (currentUser.role === 'CLIENT') {
+      return { client_id: currentUser.id }
+    }
+    return {}
+  }, [currentUser])
+
   // Auto-collapse sidebar on Tablet screen sizes
   useEffect(() => {
     const handleResize = () => {
@@ -63,19 +79,20 @@ export default function App() {
     setTimeout(() => setToast(null), 4000)
   }
 
-  // Load order list
+  // Load order list filtered by active user profile
   const loadOrders = useCallback(async () => {
     try {
       setLoadingOrders(true)
       setOrdersError(null)
-      const res = await fetchOrders()
+      const params = getUserQueryParams()
+      const res = await fetchOrders(params)
       setOrders(res.data || [])
     } catch (err) {
       setOrdersError(err.message || 'Gagal memuat daftar order')
     } finally {
       setLoadingOrders(false)
     }
-  }, [])
+  }, [getUserQueryParams])
 
   // Load technicians list
   const loadTechnicians = useCallback(async () => {
@@ -92,20 +109,28 @@ export default function App() {
     loadTechnicians()
   }, [loadOrders, loadTechnicians])
 
-  // Load detail order
+  // Load detail order with active user permission check
   const loadDetail = useCallback(async (id) => {
     if (!id) return
     try {
       setLoadingDetail(true)
       setDetailError(null)
-      const res = await fetchOrderDetail(id)
+      const params = getUserQueryParams()
+      const res = await fetchOrderDetail(id, params)
       setSelectedOrderDetail(res.data)
     } catch (err) {
-      setDetailError(err.message || 'Gagal memuat detail order')
+      // If 404 or access denied (e.g. order reassigned away), clear selected detail and return to list
+      if (err.status === 404 || (err.message && err.message.includes('tidak ditemukan'))) {
+        setSelectedOrderId(null)
+        setSelectedOrderDetail(null)
+        setDetailError(null)
+      } else {
+        setDetailError(err.message || 'Gagal memuat detail order')
+      }
     } finally {
       setLoadingDetail(false)
     }
-  }, [])
+  }, [getUserQueryParams])
 
   // Real-time SSE Connection Effect
   useEffect(() => {
@@ -116,7 +141,6 @@ export default function App() {
 
       eventSource.onopen = () => {
         setSseStatus('Connected')
-        // Upon connecting or reconnecting, fetch fresh state from API/DB
         loadOrders()
         if (selectedOrderIdRef.current) {
           loadDetail(selectedOrderIdRef.current)
@@ -129,23 +153,10 @@ export default function App() {
 
       eventSource.addEventListener('order.updated', (e) => {
         try {
-          const data = JSON.parse(e.data)
-          const updatedId = Number(data.order_id)
-          const newStatus = data.status
-          const newVersion = data.version
+          loadOrders()
 
-          // Update order status & version in order list state
-          setOrders((prevOrders) =>
-            prevOrders.map((order) =>
-              order.id === updatedId
-                ? { ...order, status: newStatus, version: newVersion }
-                : order
-            )
-          )
-
-          // If the updated order is currently open in Order Detail, refresh full detail
-          if (selectedOrderIdRef.current === updatedId) {
-            loadDetail(updatedId)
+          if (selectedOrderIdRef.current) {
+            loadDetail(selectedOrderIdRef.current)
           }
         } catch (err) {
           console.error('Gagal memproses event order.updated:', err)
@@ -285,7 +296,6 @@ export default function App() {
                   error={ordersError}
                   selectedOrderId={selectedOrderId}
                   onSelectOrder={handleSelectOrder}
-                  onRefresh={loadOrders}
                 />
               </div>
 

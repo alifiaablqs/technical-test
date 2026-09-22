@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 	"time"
 
 	"technical-test/case-study-1/backend/internal/model"
@@ -19,7 +20,7 @@ func NewOrderRepository(db *sql.DB) *OrderRepository {
 	}
 }
 
-func (r *OrderRepository) GetAll() ([]model.Order, error) {
+func (r *OrderRepository) GetAll(technicianID *uint64, clientID *uint64) ([]model.Order, error) {
 	query := `
 		SELECT
 			id,
@@ -32,16 +33,34 @@ func (r *OrderRepository) GetAll() ([]model.Order, error) {
 			created_at,
 			updated_at
 		FROM orders
-		ORDER BY created_at DESC
 	`
 
-	rows, err := r.DB.Query(query)
+	var conditions []string
+	var args []interface{}
+
+	if technicianID != nil {
+		conditions = append(conditions, "technician_id = ?")
+		args = append(args, *technicianID)
+	}
+
+	if clientID != nil {
+		conditions = append(conditions, "client_id = ?")
+		args = append(args, *clientID)
+	}
+
+	if len(conditions) > 0 {
+		query += " WHERE " + strings.Join(conditions, " AND ")
+	}
+
+	query += " ORDER BY created_at DESC"
+
+	rows, err := r.DB.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var orders []model.Order
+	orders := make([]model.Order, 0)
 
 	for rows.Next() {
 		var order model.Order
@@ -252,4 +271,14 @@ func (r *OrderRepository) UpdateStatusWithTx(ctx context.Context, tx *sql.Tx, id
 	}
 
 	return rowsAffected > 0, nil
+}
+
+func (r *OrderRepository) AssignTechnicianWithTx(ctx context.Context, tx *sql.Tx, orderID uint64, technicianID uint64, updatedAt time.Time) error {
+	query := `
+		UPDATE orders
+		SET technician_id = ?, updated_at = ?
+		WHERE id = ?
+	`
+	_, err := tx.ExecContext(ctx, query, technicianID, updatedAt, orderID)
+	return err
 }

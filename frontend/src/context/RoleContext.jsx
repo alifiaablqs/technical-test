@@ -21,17 +21,42 @@ export const ROLE_LABELS = {
   TECHNICIAN: 'Field Officer / Teknisi',
 }
 
+export const USERS = [
+  { id: 1, name: 'Client Demo', role: ROLES.CLIENT, label: 'Client Demo (CLIENT)' },
+  { id: 2, name: 'Admin Dispatcher', role: ROLES.ADMIN, label: 'Admin Dispatcher (ADMIN)' },
+  { id: 3, name: 'Technician A', role: ROLES.TECHNICIAN, label: 'Technician A (ID 3)' },
+  { id: 4, name: 'Technician B', role: ROLES.TECHNICIAN, label: 'Technician B (ID 4)' },
+]
+
 export function RoleProvider({ children }) {
-  const [currentRole, setCurrentRole] = useState(() => {
-    return localStorage.getItem('demo_current_role') || ROLES.ADMIN
+  const [currentUserId, setCurrentUserId] = useState(() => {
+    const saved = localStorage.getItem('demo_current_user_id')
+    return saved ? Number(saved) : 2 // Default to Admin Dispatcher (ID 2)
   })
 
   useEffect(() => {
-    localStorage.setItem('demo_current_role', currentRole)
-  }, [currentRole])
+    localStorage.setItem('demo_current_user_id', currentUserId)
+  }, [currentUserId])
+
+  const currentUser = USERS.find((u) => u.id === currentUserId) || USERS[1]
+  const currentRole = currentUser.role
+
+  const switchUser = (userId) => {
+    setCurrentUserId(Number(userId))
+  }
 
   return (
-    <RoleContext.Provider value={{ currentRole, setCurrentRole, ROLES, ROLE_LABELS }}>
+    <RoleContext.Provider
+      value={{
+        currentUser,
+        currentRole,
+        currentUserId,
+        switchUser,
+        USERS,
+        ROLES,
+        ROLE_LABELS,
+      }}
+    >
       {children}
     </RoleContext.Provider>
   )

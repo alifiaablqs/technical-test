@@ -2,7 +2,7 @@ import React from 'react'
 import { useRole, ROLES, ROLE_LABELS } from '../context/RoleContext'
 
 export function Header({ title, subtitle, sseStatus = 'Connected', onCreateClick, onOpenMobileDrawer }) {
-  const { currentRole, setCurrentRole } = useRole()
+  const { currentUser, currentRole, currentUserId, switchUser, USERS, ROLE_LABELS } = useRole()
 
   const canCreateOrder = currentRole === ROLES.CLIENT || currentRole === ROLES.ADMIN
 
@@ -36,30 +36,44 @@ export function Header({ title, subtitle, sseStatus = 'Connected', onCreateClick
 
       <div className="top-bar-right">
         {/* SSE Real-time Connection Indicator Badge */}
-        <div className={`sse-status-badge sse-${sseStatus.toLowerCase()}`} title={`SSE Realtime Status: ${sseStatus}`}>
-          <span className="sse-dot" />
-          <span className="sse-text">{sseStatus === 'Reconnecting' ? 'Reconnecting...' : sseStatus}</span>
-        </div>
+        {(() => {
+          const lower = (sseStatus || '').toLowerCase()
+          const statusKey = lower.includes('reconnect')
+            ? 'reconnecting'
+            : lower.includes('connect')
+            ? 'connected'
+            : 'disconnected'
+          const displayText = statusKey === 'reconnecting' ? 'Reconnecting...' : statusKey === 'connected' ? 'Connected' : 'Disconnected'
 
-        {/* Demo Role Switcher Selector */}
+          return (
+            <div className={`sse-status-badge sse-${statusKey}`} title={`SSE Realtime Status: ${displayText}`}>
+              <span className="sse-dot" />
+              <span className="sse-text">{displayText}</span>
+            </div>
+          )
+        })()}
+
+        {/* Demo Role / User Switcher Selector */}
         <div className="role-switcher-container">
-          <label className="role-switcher-label">Simulasi Role:</label>
+          <label className="role-switcher-label">Simulasi Akun:</label>
           <select
             className="role-select-control"
-            value={currentRole}
-            onChange={(e) => setCurrentRole(e.target.value)}
-            title="Ganti Role Aktif untuk Demo Skenario"
+            value={currentUserId}
+            onChange={(e) => switchUser(Number(e.target.value))}
+            title="Ganti User / Role Aktif untuk Demo Skenario"
           >
-            <option value={ROLES.CLIENT}>Client (Pelanggan)</option>
-            <option value={ROLES.ADMIN}>Admin (Dispatcher)</option>
-            <option value={ROLES.TECHNICIAN}>Technician (Teknisi)</option>
+            {USERS.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name} ({u.role})
+              </option>
+            ))}
           </select>
         </div>
 
-        {/* Current Active Role Badge */}
+        {/* Current Active User & Role Badge */}
         <div className={`role-badge role-${currentRole.toLowerCase()}`}>
           <span className="role-dot" />
-          <span className="role-name">{ROLE_LABELS[currentRole]}</span>
+          <span className="role-name">{currentUser.name} ({ROLE_LABELS[currentRole]})</span>
         </div>
 
         {canCreateOrder && onCreateClick && (
