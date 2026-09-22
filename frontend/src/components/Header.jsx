@@ -1,7 +1,7 @@
 import React from 'react'
 import { useRole, ROLES, ROLE_LABELS } from '../context/RoleContext'
 
-export function Header({ title, subtitle, onCreateClick, onOpenMobileDrawer }) {
+export function Header({ title, subtitle, sseStatus = 'Connected', onCreateClick, onOpenMobileDrawer }) {
   const { currentRole, setCurrentRole } = useRole()
 
   const canCreateOrder = currentRole === ROLES.CLIENT || currentRole === ROLES.ADMIN
@@ -35,6 +35,12 @@ export function Header({ title, subtitle, onCreateClick, onOpenMobileDrawer }) {
       </div>
 
       <div className="top-bar-right">
+        {/* SSE Real-time Connection Indicator Badge */}
+        <div className={`sse-status-badge sse-${sseStatus.toLowerCase()}`} title={`SSE Realtime Status: ${sseStatus}`}>
+          <span className="sse-dot" />
+          <span className="sse-text">{sseStatus === 'Reconnecting' ? 'Reconnecting...' : sseStatus}</span>
+        </div>
+
         {/* Demo Role Switcher Selector */}
         <div className="role-switcher-container">
           <label className="role-switcher-label">Simulasi Role:</label>
@@ -68,3 +74,4 @@ export function Header({ title, subtitle, onCreateClick, onOpenMobileDrawer }) {
     </header>
   )
 }
+

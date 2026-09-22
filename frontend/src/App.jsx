@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import {
   fetchOrders,
   fetchOrderDetail,
@@ -32,11 +32,19 @@ export default function App() {
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [detailError, setDetailError] = useState(null)
 
+  const [sseStatus, setSseStatus] = useState('Disconnected')
+  const selectedOrderIdRef = useRef(selectedOrderId)
+
   const [actionLoading, setActionLoading] = useState(false)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [cancelTargetOrder, setCancelTargetOrder] = useState(null)
 
   const [toast, setToast] = useState(null)
+
+  // Keep selectedOrderIdRef updated to prevent stale closures in SSE listener
+  useEffect(() => {
+    selectedOrderIdRef.current = selectedOrderId
+  }, [selectedOrderId])
 
   // Auto-collapse sidebar on Tablet screen sizes
   useEffect(() => {
@@ -98,6 +106,62 @@ export default function App() {
       setLoadingDetail(false)
     }
   }, [])
+
+  // Real-time SSE Connection Effect
+  useEffect(() => {
+    let eventSource = null
+
+    try {
+      eventSource = new EventSource('/api/orders/events')
+
+      eventSource.onopen = () => {
+        setSseStatus('Connected')
+        // Upon connecting or reconnecting, fetch fresh state from API/DB
+        loadOrders()
+        if (selectedOrderIdRef.current) {
+          loadDetail(selectedOrderIdRef.current)
+        }
+      }
+
+      eventSource.onerror = () => {
+        setSseStatus('Reconnecting')
+      }
+
+      eventSource.addEventListener('order.updated', (e) => {
+        try {
+          const data = JSON.parse(e.data)
+          const updatedId = Number(data.order_id)
+          const newStatus = data.status
+          const newVersion = data.version
+
+          // Update order status & version in order list state
+          setOrders((prevOrders) =>
+            prevOrders.map((order) =>
+              order.id === updatedId
+                ? { ...order, status: newStatus, version: newVersion }
+                : order
+            )
+          )
+
+          // If the updated order is currently open in Order Detail, refresh full detail
+          if (selectedOrderIdRef.current === updatedId) {
+            loadDetail(updatedId)
+          }
+        } catch (err) {
+          console.error('Gagal memproses event order.updated:', err)
+        }
+      })
+    } catch (err) {
+      console.error('Gagal inisialisasi SSE EventSource:', err)
+      setSseStatus('Disconnected')
+    }
+
+    return () => {
+      if (eventSource) {
+        eventSource.close()
+      }
+    }
+  }, [loadOrders, loadDetail])
 
   const handleSelectOrder = (id) => {
     if (selectedOrderId === id) return
@@ -189,9 +253,11 @@ export default function App() {
               ? 'Monitoring dan pengelolaan transisi status order pekerjaan secara terstruktur'
               : 'Informasi agregat seluruh order pekerjaan'
           }
+          sseStatus={sseStatus}
           onCreateClick={() => setIsCreateModalOpen(true)}
           onOpenMobileDrawer={() => setIsMobileDrawerOpen(true)}
         />
+
 
         <main className="main-content">
           {toast && (
