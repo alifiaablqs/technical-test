@@ -15,13 +15,24 @@ import (
 var (
 	ErrInvalidStatusTransition = errors.New("invalid status transition")
 	ErrDuplicateOrderNumber    = errors.New("order number already exists")
-	ErrValidation              = errors.New("order_number and description are required")
+	ErrValidation              = errors.New("validation error: required field missing or invalid")
+	ErrOrderNotFound           = errors.New("order not found")
+	ErrOptimisticLockConflict  = errors.New("optimistic locking conflict: order was updated by another process")
 )
 
 type CreateOrderInput struct {
 	OrderNumber string  `json:"order_number"`
 	ClientID    *uint64 `json:"client_id"`
 	Description string  `json:"description"`
+}
+
+type UpdateStatusInput struct {
+	Status string `json:"status"`
+}
+
+type OrderDetailResponse struct {
+	model.Order
+	History []model.OrderStatusHistory `json:"history"`
 }
 
 type OrderService struct {
@@ -90,6 +101,99 @@ func (s *OrderService) CreateOrder(ctx context.Context, input CreateOrderInput) 
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
+
+	return order, nil
+}
+
+func (s *OrderService) GetOrderByID(ctx context.Context, id uint64) (*OrderDetailResponse, error) {
+	order, err := s.OrderRepository.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if order == nil {
+		return nil, ErrOrderNotFound
+	}
+
+	history, err := s.OrderRepository.GetHistoryByOrderID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if history == nil {
+		history = make([]model.OrderStatusHistory, 0)
+	}
+
+	return &OrderDetailResponse{
+		Order:   *order,
+		History: history,
+	}, nil
+}
+
+func (s *OrderService) UpdateOrderStatus(ctx context.Context, id uint64, input UpdateStatusInput) (*model.Order, error) {
+	newStatus := strings.TrimSpace(input.Status)
+	if newStatus == "" {
+		return nil, ErrValidation
+	}
+
+	validStatuses := map[string]bool{
+		"TO DO":       true,
+		"IN PROGRESS": true,
+		"DONE":        true,
+		"CANCELLED":   true,
+	}
+
+	if !validStatuses[newStatus] {
+		return nil, ErrValidation
+	}
+
+	tx, err := s.OrderRepository.BeginTx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	// 1. Read current order with FOR UPDATE inside tx
+	order, err := s.OrderRepository.GetByIDWithTx(ctx, tx, id)
+	if err != nil {
+		return nil, err
+	}
+	if order == nil {
+		return nil, ErrOrderNotFound
+	}
+
+	// 2. Validate status transition
+	if !IsValidStatusTransition(order.Status, newStatus) {
+		return nil, ErrInvalidStatusTransition
+	}
+
+	now := time.Now()
+
+	// 3. Update status + version using optimistic locking
+	updated, err := s.OrderRepository.UpdateStatusWithTx(ctx, tx, id, newStatus, order.Version, now)
+	if err != nil {
+		return nil, err
+	}
+	if !updated {
+		return nil, ErrOptimisticLockConflict
+	}
+
+	// 4. Create history record in order_status_histories
+	history := &model.OrderStatusHistory{
+		OrderID:   id,
+		Status:    newStatus,
+		CreatedAt: now,
+	}
+	if err := s.OrderRepository.CreateHistory(ctx, tx, history); err != nil {
+		return nil, err
+	}
+
+	// 5. Commit transaction
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	order.Status = newStatus
+	order.Version += 1
+	order.UpdatedAt = now
 
 	return order, nil
 }
